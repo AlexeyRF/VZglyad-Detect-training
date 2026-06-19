@@ -9,8 +9,30 @@
 
 Этот модуль содержит переписанный с нуля код для обучения моделей архитектуры `vzglyad-detect`, **не использует** код Ultralytics под лицензией GPL-3 / AGPL-3. 
 
-Весь код написан с использованием стандартных библиотек (`torch`, `opencv-python`, `numpy`) и может свободно использоваться в коммерческих проектах без необходимости открывать исходный код вашего приложения. 
+Весь код написан с использованием стандартных библиотек (`torch`, `opencv-python`, `numpy`) и может свободно использоваться в коммерческих проектах без необходимости открывать исходный код вашего приложения. <br><br>
 
+Для запуска поместите всё по данной структуре (или скачайте из релизов):
+```text
+Vzglyad/
+├── inference (скачайте https://github.com/AlexeyRF/VZGLYAD-Detect)/
+│   ├── example.py
+│   ├── example_on_screen.py
+│   ├── README.md
+│   ├── LICENSE
+│   └── vzglyad_vision/
+│       ├── __init__.py
+│       ├── blocks.py
+│       ├── inference.py 
+│       ├── model.py
+│       └── utils.py
+└── train/ (эти коды)
+    ├── dataset.py
+    ├── loss.py
+    ├── metrics.py
+    ├── README.md
+    ├── train.py
+    └── universal_model.yaml
+```
 ### Особенности
 - **Своя архитектура** (`universal_model.yaml`)
 - **Встроенные аугментации**
@@ -69,8 +91,29 @@ python train.py --data-dir path/to/dataset --model-path ../inference/your_model.
 
 This module contains a written-from-scratch training code for the `vzglyad-detect` architecture, **not using** Ultralytics code under the GPL-3 / AGPL-3 license.
 
-All code is written using standard libraries (`torch`, `opencv-python`, `numpy`) and can be freely used in commercial projects without the requirement to open-source your application.
-
+All code is written using standard libraries (`torch`, `opencv-python`, `numpy`) and can be freely used in commercial projects without the requirement to open-source your application.<br><br>
+To run, place everything in this structure (or download from the releases):
+```text
+Vzglyad/
+├── inference (download https://github.com/AlexeyRF/VZGLYAD-Detect)/
+│   ├── example.py
+│   ├── example_on_screen.py
+│   ├── README.md
+│   ├── LICENSE
+│   └── vzglyad_vision/
+│       ├── __init__.py
+│       ├── blocks.py
+│       ├── inference.py 
+│       ├── model.py
+│       └── utils.py
+└── train/ (this repo)
+    ├── dataset.py
+    ├── loss.py
+    ├── metrics.py
+    ├── README.md
+    ├── train.py
+    └── universal_model.yaml
+```
 ### Features
 - **Custom Architecture Layout** (`universal_model.yaml`)
 - **Built-in Augmentations & Auto-split**: Automatically applies advanced data augmentations on the fly. Automatically splits the dataset 80/20 into train/val if explicit split folders are missing.
