@@ -21,6 +21,8 @@ try:
 except ImportError:
     non_max_suppression = None
 
+import copy
+
 def train(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
@@ -38,7 +40,7 @@ def train(args):
             yaml_config['scale'] = args.scale
             
         nc = yaml_config.get('nc', 80)
-        model = CustomVisionModel(yaml_config).to(device)
+        model = CustomVisionModel(copy.deepcopy(yaml_config)).to(device)
     elif args.model_path:
         print(f"Loading base model from {args.model_path}")
         data = torch.load(args.model_path, map_location='cpu')
@@ -49,7 +51,7 @@ def train(args):
         metadata = data.get('metadata', {})
         nc = yaml_config.get('nc', 80)
         
-        model = CustomVisionModel(yaml_config).to(device)
+        model = CustomVisionModel(copy.deepcopy(yaml_config)).to(device)
         
         if not args.scratch:
             print("Loading pretrained weights...")
@@ -60,7 +62,60 @@ def train(args):
     else:
         raise ValueError("You must provide either --cfg or --model-path.")
 
-    print(f"Number of classes: {nc}")
+    # Check for dataset.yaml to get class names and potentially override nc
+    dataset_yaml_path = os.path.join(args.data_dir, 'dataset.yaml')
+    if not os.path.exists(dataset_yaml_path):
+        dataset_yaml_path = os.path.join(args.data_dir, 'data.yaml')
+        
+    if os.path.exists(dataset_yaml_path):
+        print(f"Found dataset YAML: {dataset_yaml_path}")
+        with open(dataset_yaml_path, 'r', encoding='utf-8') as f:
+            data_cfg = yaml.safe_load(f)
+            
+        if 'names' in data_cfg:
+            names = data_cfg['names']
+            if isinstance(names, list):
+                metadata['names'] = {i: name for i, name in enumerate(names)}
+            else:
+                metadata['names'] = names
+                
+        dataset_nc = data_cfg.get('nc')
+        if dataset_nc is None and 'names' in data_cfg:
+            dataset_nc = len(metadata['names'])
+            
+        if dataset_nc is not None and args.cfg:
+            if nc != dataset_nc:
+                print(f"Overriding model 'nc' ({nc}) with dataset 'nc' ({dataset_nc})")
+                nc = dataset_nc
+                yaml_config['nc'] = nc
+                # Re-initialize model with correct nc
+                model = CustomVisionModel(copy.deepcopy(yaml_config)).to(device)
+    
+    if 'names' not in metadata:
+        metadata['names'] = {i: f"class_{i}" for i in range(nc)}
+
+    # Compute stride dynamically if missing
+    if not ('stride' in metadata and torch.is_tensor(model.model[-1].stride) and model.model[-1].stride.sum() > 0):
+        dummy_input = torch.zeros(1, 3, 256, 256, device=device)
+        model.eval()
+        with torch.no_grad():
+            y = []
+            x = dummy_input
+            for m in model.model[:-1]:
+                if m.f != -1:
+                    x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
+                x = m(x)
+                y.append(x if m.i in model.save else None)
+            
+            detect_layer = model.model[-1]
+            if hasattr(detect_layer, 'f'):
+                input_feats = [x if j == -1 else y[j] for j in detect_layer.f]
+                strides = [256 / f.shape[-2] for f in input_feats]
+                detect_layer.stride = torch.tensor(strides, device=device)
+                metadata['stride'] = strides
+                print(f"Computed dynamic strides: {strides}")
+
+    print(f"Final number of classes: {nc}")
 
     # Datasets and Dataloaders
     import random
@@ -174,14 +229,15 @@ def train(args):
                 # Inference metrics (if NMS is available)
                 if non_max_suppression is not None:
                     # Model outputs [B, 4+nc, anchors]
-                    # non_max_suppression expects [B, anchors, 4+nc]
-                    preds_for_nms = preds_raw.transpose(1, 2)
-                    preds_nms = non_max_suppression(preds_for_nms, conf_thres=0.01, iou_thres=0.5)
+                    # non_max_suppression EXPECTS [B, 4+nc, anchors]
+                    preds_nms = non_max_suppression(preds_raw, conf_thres=0.01, iou_thres=0.5)
                     
                     # Split targets by batch_idx
                     for i in range(len(imgs)):
                         tgt_mask = targets[:, 0] == i
-                        all_targets.append(targets[tgt_mask])
+                        # targets shape is [batch_idx, cls_id, cx, cy, w, h]
+                        # remove batch_idx column for metrics computation
+                        all_targets.append(targets[tgt_mask][:, 1:])
                         all_preds.append(preds_nms[i])
                         
         avg_val_loss = val_loss / max(len(val_loader), 1)

@@ -117,9 +117,9 @@ def assign_targets(p_boxes, p_cls, gt_boxes, gt_classes, k=10):
     scale_sq = (gt_boxes[None, :, 2]**2 + gt_boxes[None, :, 3]**2).clamp(min=1e-6)
     spatial_cost = dist_sq / scale_sq
     
-    # Increase spatial cost heavily if center is out of box
+    # Add spatial cost if center is out of box, but don't make it impossible to match
     out_of_box = (torch.abs(dist_x) > gt_boxes[None, :, 2] / 2) | (torch.abs(dist_y) > gt_boxes[None, :, 3] / 2)
-    spatial_cost[out_of_box] += 1000.0
+    spatial_cost[out_of_box] += 10.0
     
     cost = cls_cost + 3.0 * box_cost + spatial_cost
     
@@ -139,8 +139,6 @@ def assign_targets(p_boxes, p_cls, gt_boxes, gt_classes, k=10):
     
     for idx in sort_idx:
         anchor_idx = topk_idx_flat[idx]
-        if cost_flat[idx] > 500.0:  # Skip if cost is too high (e.g. out of box)
-            continue
         if not mask[anchor_idx]:
             mask[anchor_idx] = True
             gt_idx = gt_idx_flat[idx]
